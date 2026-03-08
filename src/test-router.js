@@ -601,6 +601,25 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — start() tags initial history state in SPA mode');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
+  assertEqual(history.state?.__embedRoute, undefined, 'no stateKey before start');
+  router.start();
+  assertEqual(history.state.__embedRoute, '/', 'initial entry tagged with stateKey after start');
+  router.destroy();
+}
+
+section('QueryRouter — start() does not tag initial state in reload mode');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes, pollInterval: 0 });
+  router.start();
+  assertEqual(history.state?.__embedRoute, undefined, 'reload mode does not tag initial state');
+  router.destroy();
+}
+
 section('QueryRouter — reconfigure() switches mode');
 resetMocks();
 {

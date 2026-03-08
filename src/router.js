@@ -207,6 +207,21 @@ export class QueryRouter {
       state: null,
     });
 
+    // Tag the initial history entry so back/forward recognizes it as ours.
+    // Without this, the first back-button press after an embed navigation
+    // won't have our stateKey and won't be suppressed from host handlers.
+    if (this._config.linkMode === 'spa') {
+      const stateKey = this._strategy._stateKey;
+      if (!window.history.state?.[stateKey]) {
+        const initialPath = this._currentRoute.path || this._config.defaultRoute;
+        safeReplaceState(
+          { ...window.history.state, [stateKey]: initialPath },
+          '',
+          window.location.href,
+        );
+      }
+    }
+
     this._log('Started');
   }
 
