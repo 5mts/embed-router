@@ -313,6 +313,8 @@ router.buildUrl('candidate', { section: 'city-council', candidate: 'harper' });
 // query mode: '/voterguide?route=%2Fcity-council%2Fcandidate%2Fharper'
 ```
 
+**Note:** When using `buildUrl()` to create links manually (instead of using the `<Link>` component), add `data-excludelink="true"` to the `<a>` tag. This tells host CMSs to skip their own click interception on that link. See the `<Link>` section above for details.
+
 ### `router.on(event, fn)` / `router.off(event, fn)`
 
 Subscribe/unsubscribe to route change events. `on` returns an unsubscribe function.
@@ -376,6 +378,16 @@ Props:
 - All other props are passed through to the `<a>` element
 
 Adds `aria-current="page"` when the link matches the current route.
+
+**Important:** The `<Link>` component automatically adds `data-excludelink="true"` to all rendered `<a>` tags. This attribute tells cooperative host CMSs (e.g., WPR) to leave the link alone and not intercept clicks on it. If you build links manually using `buildUrl()` instead of using `<Link>`, you must add this attribute yourself:
+
+```html
+<a href={router.buildUrl('/city-council')} data-excludelink="true">
+  City Council
+</a>
+```
+
+Without this attribute, the host CMS may intercept clicks on your links and attempt its own navigation, which can cause page reloads or broken routing.
 
 #### `useRoute()`
 
