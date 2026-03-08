@@ -330,7 +330,7 @@ function buildPathFromNameSafe(router, name, params) {
     // For query mode, parse out the route param
     if (url.includes('?')) {
       const u = new URL(url, window.location.origin);
-      return u.searchParams.get(router._strategy?.param || 'route')?.toLowerCase() || '/';
+      return u.searchParams.get(router.getParamName() || 'route')?.toLowerCase() || '/';
     }
     // For hash mode, strip the #
     if (url.startsWith('#')) {

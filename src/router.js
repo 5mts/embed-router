@@ -413,6 +413,15 @@ export class QueryRouter {
   }
 
   /**
+   * Get the query parameter name used by the current strategy.
+   * Returns null in hash mode (no query param is used).
+   * @returns {string|null}
+   */
+  getParamName() {
+    return this._strategy.param ?? null;
+  }
+
+  /**
    * Store a goingTo cue in sessionStorage for reload-mode navigation.
    *
    * Used by the Link component in reload mode: it calls this before letting
