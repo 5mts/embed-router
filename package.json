@@ -1,0 +1,21 @@
+{
+    "name": "@electup/embed-router",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.js",
+    "exports": {
+      ".": "./src/index.js",
+      "./preact": "./src/preact/index.js"
+    },
+    "files": [
+      "src"
+    ],
+    "peerDependencies": {
+      "preact": ">=10.0.0"
+    },
+    "peerDependenciesMeta": {
+      "preact": {
+        "optional": true
+      }
+    }
+  }
