@@ -215,30 +215,41 @@ export class QueryRouter {
    * 
    * Accepts either:
    *   - A path string: navigate('/city-council/candidate/harper')
+   *   - A path + options: navigate('/city-council', { historyMode: 'replace' })
    *   - A route name + params: navigate('candidate', { section: 'city-council', candidate: 'harper' })
-   * 
-   * @param {string} pathOrName - path string or route name
-   * @param {object} [params] - if first arg is a route name, the params to fill in
+   *   - A route name + params + options: navigate('candidate', { section: 'x' }, { historyMode: 'replace' })
+   *
+   * Heuristic: if the first argument starts with '/', it's always a path.
+   * Otherwise it's treated as a route name (second arg = params).
+   * Use { named: true/false } in options to override the heuristic.
+   *
+   * @param {string} pathOrName - path string (starts with /) or route name
+   * @param {object} [paramsOrOptions] - route params (if named) or options (if path)
    * @param {object} [options]
-   * @param {'push'|'replace'} [options.historyMode] - override default history mode for this navigation
+   * @param {'push'|'replace'} [options.historyMode] - override default history mode
+   * @param {boolean} [options.named] - force named route (true) or path (false) interpretation
    * @returns {boolean} true if navigation occurred, false if deduped
    */
-  navigate(pathOrName, params, options = {}) {
+  navigate(pathOrName, paramsOrOptions, options = {}) {
     let path;
 
-    if (params && typeof params === 'object' && !Array.isArray(params)) {
-      // Distinguish between route params and options.
-      // If the object has 'historyMode' it's an options object, not route params.
-      // If pathOrName starts with '/' it's a path, so second arg must be options.
-      const isOptions = 'historyMode' in params || 'state' in params || pathOrName.startsWith('/');
-      if (isOptions) {
-        path = pathOrName;
-        options = params;
-      } else {
-        // Treat as named route: navigate('candidate', { section: 'x', candidate: 'y' })
-        path = buildPath(this._compiledRoutes, pathOrName, params);
-      }
+    // Determine if this is a named route or a path.
+    // Heuristic: paths start with '/', route names don't.
+    // Override with { named: true/false } in either options position.
+    const namedOverride = options.named ?? paramsOrOptions?.named;
+    const isNamed = namedOverride !== undefined
+      ? namedOverride
+      : !pathOrName.startsWith('/');
+
+    if (isNamed && paramsOrOptions && typeof paramsOrOptions === 'object') {
+      // Named route: navigate('candidate', { section: 'x', candidate: 'y' }, options?)
+      path = buildPath(this._compiledRoutes, pathOrName, paramsOrOptions);
+    } else if (!isNamed && paramsOrOptions && typeof paramsOrOptions === 'object') {
+      // Path with options in second arg: navigate('/city-council', { historyMode: 'replace' })
+      path = pathOrName;
+      options = paramsOrOptions;
     } else {
+      // Bare path or name string
       path = pathOrName;
     }
 
@@ -358,7 +369,7 @@ export class QueryRouter {
    */
   buildUrl(pathOrName, params) {
     let path;
-    if (params) {
+    if (params && typeof params === 'object') {
       path = buildPath(this._compiledRoutes, pathOrName, params);
     } else {
       path = pathOrName;

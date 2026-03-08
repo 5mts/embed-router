@@ -272,6 +272,19 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — navigate() with named override');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
+  router.start();
+
+  // Force named=false to treat a non-/ string as a path
+  router.navigate('city-council', { named: false });
+  assertEqual(router.getRoute().name, 'section', 'named:false treats string as path');
+  assertEqual(router.getRoute().params.section, 'city-council', 'correct params');
+  router.destroy();
+}
+
 section('QueryRouter — AbortSignal on navigation');
 resetMocks();
 {
