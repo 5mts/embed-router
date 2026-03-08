@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>embed-router Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+    /* Simulated host page */
+    .host-page { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .host-header { background: #2d3748; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0; }
+    .host-header h1 { font-size: 14px; font-weight: 600; opacity: 0.7; }
+    .host-header p { font-size: 12px; opacity: 0.5; margin-top: 4px; }
+
+    /* The "embed" container */
+    .embed-container {
+      background: white; border: 2px dashed #cbd5e0; border-top: none;
+      border-radius: 0 0 8px 8px; padding: 0; min-height: 400px;
+    }
+    .embed-container .embed-inner { padding: 20px; }
+
+    /* Controls panel */
+    .controls {
+      background: #edf2f7; border-bottom: 1px solid #e2e8f0;
+      padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    }
+    .controls label { font-size: 13px; font-weight: 600; color: #4a5568; }
+    .controls select, .controls button {
+      font-size: 13px; padding: 4px 10px; border: 1px solid #cbd5e0;
+      border-radius: 4px; background: white; cursor: pointer;
+    }
+    .controls button { background: #4299e1; color: white; border-color: #3182ce; }
+    .controls button:hover { background: #3182ce; }
+
+    /* Router nav */
+    .embed-nav {
+      display: flex; gap: 8px; padding: 16px 20px; border-bottom: 1px solid #e2e8f0;
+      flex-wrap: wrap;
+    }
+    .embed-nav a {
+      text-decoration: none; padding: 6px 14px; border-radius: 6px;
+      font-size: 14px; color: #4a5568; background: #edf2f7; transition: all 0.15s;
+    }
+    .embed-nav a:hover { background: #e2e8f0; }
+    .embed-nav a[aria-current="page"] { background: #4299e1; color: white; }
+
+    /* Content pages */
+    .page { animation: fadeIn 0.15s ease-out; }
+    .page h2 { font-size: 20px; margin-bottom: 12px; }
+    .page h3 { font-size: 16px; margin-bottom: 8px; color: #2d3748; }
+    .page p { color: #718096; line-height: 1.6; margin-bottom: 8px; }
+    .page .back-link { color: #4299e1; text-decoration: none; font-size: 14px; display: inline-block; margin-bottom: 12px; }
+    .page .back-link:hover { text-decoration: underline; }
+    .page .card {
+      background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: 12px 16px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
+    }
+    .page .card:hover { border-color: #4299e1; background: #ebf8ff; }
+    .page .card a { text-decoration: none; color: inherit; display: block; }
+    .page .card .name { font-weight: 600; color: #2d3748; }
+    .page .card .meta { font-size: 13px; color: #a0aec0; margin-top: 2px; }
+    .badge { display: inline-block; background: #ebf8ff; color: #2b6cb0; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+
+    /* Debug panel */
+    .debug-panel {
+      background: #1a202c; color: #a0aec0; padding: 16px 20px;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 12px;
+      border-top: 1px solid #2d3748; max-height: 200px; overflow-y: auto;
+      border-radius: 0 0 6px 6px;
+    }
+    .debug-panel .entry { padding: 2px 0; border-bottom: 1px solid #2d374830; }
+    .debug-panel .source { color: #68d391; }
+    .debug-panel .path { color: #63b3ed; }
+    .debug-panel .name { color: #fbd38d; }
+    .debug-panel .params { color: #fc8181; }
+
+    /* URL display */
+    .url-bar {
+      background: #2d3748; color: #a0aec0; padding: 8px 16px; font-family: monospace;
+      font-size: 12px; border-bottom: 1px solid #4a5568; word-break: break-all;
+    }
+    .url-bar .param-highlight { color: #68d391; font-weight: bold; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="host-page">
+    <div class="host-header">
+      <h1>HOST CMS PAGE — Simulated embed environment</h1>
+      <p>The widget below is the embedded router demo. Try navigating, using back/forward, and switching modes.</p>
+    </div>
+    <div id="app" class="embed-container"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "preact": "https://esm.sh/preact@10.25.4",
+      "preact/hooks": "https://esm.sh/preact@10.25.4/hooks",
+      "preact/": "https://esm.sh/preact@10.25.4/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import { h, render, createContext } from 'preact';
+    import { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'preact/hooks';
+    import { QueryRouter, snapshotUrl } from './src/index.js';
+    import { RouterProvider, Route, Link, useRoute, useNavigate, useRouter } from './src/preact/index.js';
+
+    // ── Fake data ──────────────────────────────────────────────
+
+    const DATA = {
+      'city-council': {
+        label: 'City Council',
+        candidates: [
+          { slug: 'harper-robinson', name: 'Harper Robinson', party: 'Independent', bio: 'Community organizer with 10 years of civic engagement experience.' },
+          { slug: 'alex-chen', name: 'Alex Chen', party: 'Progressive', bio: 'Former teacher advocating for education reform and affordable housing.' },
+          { slug: 'maria-santos', name: 'Maria Santos', party: 'Democrat', bio: 'Small business owner focused on local economic development.' },
+        ],
+        groups: {
+          'district-1': { label: 'District 1', candidates: ['harper-robinson', 'alex-chen'] },
+          'district-2': { label: 'District 2', candidates: ['maria-santos'] },
+        },
+        topics: [
+          { slug: 'housing', name: 'Affordable Housing' },
+          { slug: 'transit', name: 'Public Transit' },
+          { slug: 'education', name: 'Education Funding' },
+        ],
+      },
+      'school-board': {
+        label: 'School Board',
+        candidates: [
+          { slug: 'jordan-kim', name: 'Jordan Kim', party: 'Non-partisan', bio: 'Parent and PTA president with a focus on equitable education.' },
+          { slug: 'sam-okafor', name: 'Sam Okafor', party: 'Non-partisan', bio: 'Former principal with 20 years in public education.' },
+        ],
+        groups: {},
+        topics: [
+          { slug: 'curriculum', name: 'Curriculum Standards' },
+          { slug: 'funding', name: 'School Funding' },
+        ],
+      },
+    };
+
+    // ── Route definitions ──────────────────────────────────────
+
+    const routes = [
+      { path: '/', name: 'home' },
+      { path: '/:section', name: 'section' },
+      { path: '/:section/candidate/:candidate', name: 'candidate' },
+      { path: '/:section/:group', name: 'group' },
+      { path: '/:section/:group/topic/:topic', name: 'topic' },
+      { path: '/:section/topic/:topic', name: 'sectionTopic' },
+    ];
+
+    const legacyRoutes = [
+      { params: ['section', 'group', 'topic'], path: '/:section/:group/topic/:topic' },
+      { params: ['section', 'candidate'],      path: '/:section/candidate/:candidate' },
+      { params: ['section', 'topic'],          path: '/:section/topic/:topic' },
+      { params: ['section', 'group'],          path: '/:section/:group' },
+      { params: ['section'],                   path: '/:section' },
+    ];
+
+    // ── Router instance ────────────────────────────────────────
+
+    const urlSnapshot = snapshotUrl();
+
+    function createRouter(mode) {
+      return new QueryRouter({
+        mode,
+        routes,
+        legacyRoutes,
+        initialUrl: urlSnapshot,
+        debug: true,
+      });
+    }
+
+    // ── Page components ────────────────────────────────────────
+
+    function HomePage() {
+      return h('div', { class: 'page' },
+        h('h2', null, 'Voter Guide'),
+        h('p', null, 'Select a race to explore candidates and topics.'),
+        ...Object.entries(DATA).map(([slug, section]) =>
+          h('div', { class: 'card', key: slug },
+            h(Link, { to: `/${slug}` },
+              h('div', { class: 'name' }, section.label),
+              h('div', { class: 'meta' }, `${section.candidates.length} candidates · ${section.topics.length} topics`)
+            )
+          )
+        )
+      );
+    }
+
+    function SectionPage({ params }) {
+      const section = DATA[params.section];
+      if (!section) return h('div', { class: 'page' }, h('p', null, `Unknown section: ${params.section}`));
+
+      return h('div', { class: 'page' },
+        h(Link, { to: '/', class: 'back-link' }, '\u2190 All Races'),
+        h('h2', null, section.label),
+        h('h3', null, 'Candidates'),
+        ...section.candidates.map(c =>
+          h('div', { class: 'card', key: c.slug },
+            h(Link, { to: 'candidate', params: { section: params.section, candidate: c.slug } },
+              h('div', { class: 'name' }, c.name, ' ', h('span', { class: 'badge' }, c.party)),
+              h('div', { class: 'meta' }, c.bio)
+            )
+          )
+        ),
+        Object.keys(section.groups).length > 0 && h('h3', { style: 'margin-top: 16px' }, 'Districts'),
+        ...Object.entries(section.groups).map(([gSlug, group]) =>
+          h('div', { class: 'card', key: gSlug },
+            h(Link, { to: `/${params.section}/${gSlug}` },
+              h('div', { class: 'name' }, group.label),
+              h('div', { class: 'meta' }, `${group.candidates.length} candidates`)
+            )
+          )
+        ),
+        h('h3', { style: 'margin-top: 16px' }, 'Topics'),
+        ...section.topics.map(t =>
+          h('div', { class: 'card', key: t.slug },
+            h(Link, { to: 'sectionTopic', params: { section: params.section, topic: t.slug } },
+              h('div', { class: 'name' }, t.name)
+            )
+          )
+        )
+      );
+    }
+
+    function CandidatePage({ params }) {
+      const section = DATA[params.section];
+      const candidate = section?.candidates.find(c => c.slug === params.candidate);
+      if (!candidate) return h('div', { class: 'page' }, h('p', null, 'Candidate not found'));
+
+      return h('div', { class: 'page' },
+        h(Link, { to: `/${params.section}`, class: 'back-link' }, `\u2190 Back to ${section.label}`),
+        h('h2', null, candidate.name),
+        h('span', { class: 'badge' }, candidate.party),
+        h('p', { style: 'margin-top: 12px' }, candidate.bio),
+        h('p', null, 'This URL is shareable — copy it and paste in another tab to verify deep linking works.')
+      );
+    }
+
+    function GroupPage({ params }) {
+      const section = DATA[params.section];
+      const group = section?.groups[params.group];
+      if (!group) return h('div', { class: 'page' }, h('p', null, 'Group not found'));
+
+      return h('div', { class: 'page' },
+        h(Link, { to: `/${params.section}`, class: 'back-link' }, `\u2190 Back to ${section.label}`),
+        h('h2', null, group.label),
+        ...group.candidates.map(slug => {
+          const c = section.candidates.find(x => x.slug === slug);
+          return c && h('div', { class: 'card', key: slug },
+            h(Link, { to: 'candidate', params: { section: params.section, candidate: slug } },
+              h('div', { class: 'name' }, c.name),
+            )
+          );
+        })
+      );
+    }
+
+    function TopicPage({ params }) {
+      const section = DATA[params.section];
+      const topic = section?.topics.find(t => t.slug === params.topic);
+      const backPath = params.group ? `/${params.section}/${params.group}` : `/${params.section}`;
+
+      return h('div', { class: 'page' },
+        h(Link, { to: backPath, class: 'back-link' }, '\u2190 Back'),
+        h('h2', null, topic?.name || params.topic),
+        h('p', null, `Viewing topic "${params.topic}" in ${section?.label || params.section}${params.group ? ` / ${params.group}` : ''}.`)
+      );
+    }
+
+    function SectionTopicPage({ params }) {
+      return TopicPage({ params });
+    }
+
+    function NotFoundPage({ route }) {
+      return h('div', { class: 'page' },
+        h(Link, { to: '/', class: 'back-link' }, '\u2190 Home'),
+        h('h2', null, '404 — Not Found'),
+        h('p', null, `No route matched: ${route?.path || 'unknown'}`)
+      );
+    }
+
+    // ── Debug log ──────────────────────────────────────────────
+
+    function DebugLog({ entries }) {
+      const panelRef = useRef(null);
+      useEffect(() => {
+        if (panelRef.current) panelRef.current.scrollTop = panelRef.current.scrollHeight;
+      }, [entries]);
+
+      return h('div', { class: 'debug-panel', ref: panelRef },
+        entries.length === 0
+          ? h('div', null, 'Waiting for route events...')
+          : entries.map((e, i) =>
+              h('div', { class: 'entry', key: i },
+                h('span', { class: 'source' }, `[${e.source}] `),
+                h('span', { class: 'path' }, e.path || '(none)'),
+                e.name && h('span', { class: 'name' }, ` → ${e.name}`),
+                e.params && Object.keys(e.params).length > 0 &&
+                  h('span', { class: 'params' }, ` ${JSON.stringify(e.params)}`)
+              )
+            )
+      );
+    }
+
+    // ── URL bar ────────────────────────────────────────────────
+
+    function UrlBar({ mode }) {
+      const [url, setUrl] = useState(location.href);
+      useEffect(() => {
+        const interval = setInterval(() => setUrl(location.href), 200);
+        return () => clearInterval(interval);
+      }, []);
+
+      const display = url.replace(location.origin, '');
+      return h('div', { class: 'url-bar' }, 'URL: ', display);
+    }
+
+    // ── Nav bar ────────────────────────────────────────────────
+
+    function Nav() {
+      return h('div', { class: 'embed-nav' },
+        h(Link, { to: '/', activeClass: 'active' }, 'Home'),
+        ...Object.entries(DATA).map(([slug, sec]) =>
+          h(Link, { to: `/${slug}`, activeClass: 'active', key: slug }, sec.label)
+        )
+      );
+    }
+
+    // ── Main App ───────────────────────────────────────────────
+
+    function App({ router, onModeChange, mode }) {
+      const [debugEntries, setDebugEntries] = useState([]);
+
+      useEffect(() => {
+        const unsub = router.on('route', ({ route, source }) => {
+          setDebugEntries(prev => [...prev.slice(-50), {
+            source, path: route.path, name: route.name, params: route.params
+          }]);
+        });
+        return unsub;
+      }, [router]);
+
+      return h(RouterProvider, { router },
+        h('div', { class: 'controls' },
+          h('label', null, 'Mode: '),
+          h('select', {
+            value: mode,
+            onChange: (e) => onModeChange(e.target.value),
+          },
+            h('option', { value: 'query' }, 'Query (?route=/...)'),
+            h('option', { value: 'hash' }, 'Hash (#/...)'),
+          ),
+          h('button', {
+            onClick: () => {
+              // Test legacy URL: simulate navigating to a legacy-format URL
+              const params = new URLSearchParams(location.search);
+              // Clear any existing route param
+              params.delete('route');
+              params.set('section', 'city-council');
+              params.set('candidate', 'harper-robinson');
+              const newUrl = location.pathname + '?' + params.toString();
+              history.pushState(null, '', newUrl);
+              // Force the page to reload with legacy params for the router to pick up
+              location.reload();
+            }
+          }, 'Test Legacy URL'),
+          h('button', {
+            onClick: () => {
+              // Simulate host CMS clobbering our query param
+              const newUrl = location.pathname + '?hostParam=something';
+              history.pushState({ psUrl: '/host-page' }, '', newUrl);
+            }
+          }, 'Simulate Host Clobber'),
+        ),
+        h(UrlBar, { mode }),
+        h(Nav, null),
+        h('div', { class: 'embed-inner' },
+          h(Route, { path: '/', component: HomePage }),
+          h(Route, { path: '/:section', component: SectionPage }),
+          h(Route, { path: '/:section/candidate/:candidate', component: CandidatePage }),
+          h(Route, { path: '/:section/:group', component: GroupPage }),
+          h(Route, { path: '/:section/:group/topic/:topic', component: TopicPage }),
+          h(Route, { path: '/:section/topic/:topic', component: SectionTopicPage }),
+          h(Route, { fallback: true, component: NotFoundPage }),
+        ),
+        h(DebugLog, { entries: debugEntries }),
+      );
+    }
+
+    // ── Bootstrap ──────────────────────────────────────────────
+
+    let currentRouter = null;
+    let currentMode = 'query';
+
+    // Check if URL already has hash routing hints
+    if (location.hash && location.hash.length > 1 && !location.search.includes('route=')) {
+      currentMode = 'hash';
+    }
+
+    function mount(mode) {
+      if (currentRouter) {
+        currentRouter.destroy();
+      }
+      currentMode = mode;
+      currentRouter = createRouter(mode);
+
+      render(
+        h(App, {
+          router: currentRouter,
+          mode: currentMode,
+          onModeChange: (newMode) => {
+            // Clean URL before switching
+            history.replaceState(null, '', location.pathname);
+            mount(newMode);
+          },
+        }),
+        document.getElementById('app')
+      );
+    }
+
+    mount(currentMode);
+  </script>
+</body>
+</html>
