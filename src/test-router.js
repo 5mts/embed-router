@@ -646,6 +646,21 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — navigationComplete() emits event');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
+  router.start();
+  router.navigate('/city-council');
+
+  let completedRoute = null;
+  router.on('navigationComplete', (data) => { completedRoute = data.route; });
+  router.navigationComplete();
+  assertEqual(completedRoute?.name, 'section', 'navigationComplete emits current route');
+  assertEqual(completedRoute?.params.section, 'city-council', 'correct params in event');
+  router.destroy();
+}
+
 section('QueryRouter — start() tags initial history state in SPA mode');
 resetMocks();
 {

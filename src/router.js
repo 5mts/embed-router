@@ -120,6 +120,7 @@ export class QueryRouter {
       historyMode: config.historyMode || 'push',
       defaultRoute: config.defaultRoute || '/',
       pollInterval: config.pollInterval ?? 100,
+      embedId: config.embedId || null,
       debug: config.debug || false,
       normalizeRoute: config.normalizeRoute || normalizePath,
       onHostInterference: config.onHostInterference || null,
@@ -419,6 +420,51 @@ export class QueryRouter {
    */
   getParamName() {
     return this._strategy.param ?? null;
+  }
+
+  /**
+   * Signal that the application has finished rendering after a navigation.
+   * Triggers post-navigation behaviors: scroll-to-embed and the
+   * electupLoaded custom event.
+   *
+   * Call this from your app after data fetching + rendering is complete.
+   *
+   * @param {object} [options]
+   * @param {string} [options.scrollToId] - element ID to scroll to (defaults to embedId config)
+   */
+  navigationComplete(options = {}) {
+    const scrollToId = options.scrollToId || this._config.embedId;
+
+    // Scroll to embed (only scroll UP to bring it into view, not down)
+    if (scrollToId && typeof document !== 'undefined') {
+      const el = document.getElementById(scrollToId);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const targetTop = rect.top + window.scrollY - (window.innerHeight * 0.08);
+        if (window.scrollY > targetTop) {
+          window.scrollTo({ top: targetTop });
+        }
+      }
+    }
+
+    // Emit loaded event for host page / iframe parent integration
+    if (typeof document !== 'undefined' && typeof CustomEvent !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('electupLoaded', {
+        bubbles: false,
+        detail: {
+          path: this._currentRoute.path,
+          params: this._currentRoute.params,
+          embedId: this._config.embedId,
+        },
+      }));
+    }
+
+    // Emit on the router's own emitter for subscribers
+    this._emitter.emit('navigationComplete', {
+      route: this._currentRoute,
+    });
+
+    this._log('Navigation complete', this._currentRoute.path);
   }
 
   /**
