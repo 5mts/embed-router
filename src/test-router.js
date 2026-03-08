@@ -781,6 +781,51 @@ resetMocks();
   router.destroy();
 }
 
+// --- restart() ---
+
+section('QueryRouter — restart() calls start() if not started');
+resetMocks();
+{
+  const router = new QueryRouter({
+    mode: 'hash', linkMode: 'spa', routes, pollInterval: 0,
+    initialUrl: { search: '', hash: '#/city-council', href: 'https://example.com/#/city-council' },
+  });
+  const events = [];
+  router.on('route', (e) => events.push(e));
+
+  // Not started yet — restart should start it
+  router.restart();
+  assertEqual(events.length, 1, 'restart emits initial route event via start()');
+  assertEqual(events[0].source, 'init', 'source is init (came from start)');
+  assertEqual(events[0].route.path, '/city-council', 'correct initial route');
+  router.destroy();
+}
+
+section('QueryRouter — restart() re-emits current route if already started');
+resetMocks();
+{
+  const router = new QueryRouter({
+    mode: 'hash', linkMode: 'spa', routes, pollInterval: 0,
+    initialUrl: { search: '', hash: '#/city-council', href: 'https://example.com/#/city-council' },
+  });
+  const events = [];
+  router.on('route', (e) => events.push(e));
+  router.start();
+  assertEqual(events.length, 1, 'start emits initial route');
+
+  // Navigate to a different route
+  router.navigate('/city-council/candidate/harper');
+  assertEqual(events.length, 2, 'navigate emits route event');
+
+  // Restart should re-emit current route
+  router.restart();
+  assertEqual(events.length, 3, 'restart emits route event');
+  assertEqual(events[2].source, 'restart', 'source is restart');
+  assertEqual(events[2].route.path, '/city-council/candidate/harper', 'current route re-emitted');
+  assertEqual(events[2].previous, null, 'previous is null on restart');
+  router.destroy();
+}
+
 // ===== SUMMARY =====
 
 console.log(`\n${'='.repeat(40)}`);

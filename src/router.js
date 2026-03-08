@@ -586,6 +586,28 @@ export class QueryRouter {
   }
 
   /**
+   * Re-initialize the router. If already started, re-emits the current route
+   * with source 'restart' (useful when the embed re-mounts without a full
+   * page reload). If not started, calls start().
+   */
+  restart() {
+    if (!this._started) {
+      this.start();
+      return;
+    }
+
+    // Already started — re-emit current route so subscribers re-render
+    this._emitter.emit('route', {
+      route: this._currentRoute,
+      previous: null,
+      source: 'restart',
+      state: null,
+    });
+
+    this._log('Restarted');
+  }
+
+  /**
    * Full cleanup. Removes all event listeners, clears polling interval,
    * aborts in-flight work, and removes all subscribers.
    *
