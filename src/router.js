@@ -124,6 +124,7 @@ export class QueryRouter {
       debug: config.debug || false,
       normalizeRoute: config.normalizeRoute || normalizePath,
       onHostInterference: config.onHostInterference || null,
+      prefix: config.prefix || '',
     };
 
     // --- sessionStorage key for goingTo cue (reload mode) ---
@@ -140,6 +141,7 @@ export class QueryRouter {
     const strategyConfig = {
       param: this._config.param,
       id: this._config.id,
+      prefix: this._config.prefix,
       stateKey,
       debug: this._config.debug,
     };
@@ -394,7 +396,8 @@ export class QueryRouter {
     const normalized = this._normalize(path) || this._config.defaultRoute;
 
     if (this._config.mode === 'hash') {
-      return '#' + normalized;
+      const prefix = this._config.prefix;
+      return prefix ? `#${prefix}:${normalized}` : `#${normalized}`;
     }
 
     // Query mode: build URL preserving existing params
@@ -551,6 +554,7 @@ export class QueryRouter {
       const strategyConfig = {
         param: this._config.param,
         id: this._config.id,
+        prefix: this._config.prefix,
         stateKey: this._strategy._stateKey,
         debug: this._config.debug,
       };
@@ -767,6 +771,17 @@ export class QueryRouter {
     if (this._config.mode === 'hash') {
       const hash = snapshot.hash;
       if (!hash || hash === '#') return null;
+
+      const prefix = this._config.prefix;
+      if (prefix) {
+        const expected = `#${prefix}:`;
+        if (!hash.startsWith(expected)) return null;
+        const path = hash.slice(expected.length);
+        if (!path) return null;
+        return path.startsWith('/') ? path : '/' + path;
+      }
+
+      if (hash === '#/') return null;
       const path = hash.slice(1);
       return path.startsWith('/') ? path : '/' + path;
     }

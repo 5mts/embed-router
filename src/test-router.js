@@ -411,6 +411,45 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — Hash mode with prefix reads prefixed hash');
+resetMocks();
+{
+  historyStack[0].url = 'https://example.com/voterguide#evg:/city-council';
+  const router = new QueryRouter({ mode: 'hash', prefix: 'evg', routes });
+  assertEqual(router.getRoute().name, 'section', 'reads prefixed hash');
+  assertEqual(router.getRoute().params.section, 'city-council', 'correct params');
+  router.destroy();
+}
+
+section('QueryRouter — Hash mode with prefix ignores non-prefixed hash');
+resetMocks();
+{
+  // Host page has #contact anchor — should not match our route
+  historyStack[0].url = 'https://example.com/voterguide#contact';
+  const router = new QueryRouter({ mode: 'hash', prefix: 'evg', routes });
+  assertEqual(router.getRoute().name, 'home', 'non-prefixed hash ignored, defaults to /');
+  router.destroy();
+}
+
+section('QueryRouter — Hash mode with prefix writes prefixed hash');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'hash', prefix: 'evg', routes });
+  router.start();
+  router.navigate('/city-council/candidate/harper');
+  assertEqual(currentUrl().hash, '#evg:/city-council/candidate/harper', 'writes prefixed hash');
+  router.destroy();
+}
+
+section('QueryRouter — Hash mode with prefix buildUrl includes prefix');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'hash', prefix: 'evg', routes });
+  const url = router.buildUrl('/city-council');
+  assertEqual(url, '#evg:/city-council', 'buildUrl includes prefix');
+  router.destroy();
+}
+
 section('QueryRouter — Multi-embed with id prefix');
 resetMocks();
 {
