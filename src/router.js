@@ -169,6 +169,8 @@ export class QueryRouter {
     // --- Bound handlers (so we can remove them on destroy) ---
     this._onPopState = this._handlePopState.bind(this);
     this._onHashChange = this._handleHashChange.bind(this);
+    this._onHashChangeSuppressor = this._handleHashChangeSuppressor.bind(this);
+    this._suppressNextHashChange = false;
     this._pollTimerId = null;
 
     // --- Determine initial route (as early as possible) ---
@@ -191,13 +193,21 @@ export class QueryRouter {
     if (this._started) return;
     this._started = true;
 
-    // Attach event listeners
+    // Attach event listeners — capture phase so we fire before host handlers
     for (const event of this._strategy.events) {
       if (event === 'popstate') {
-        window.addEventListener('popstate', this._onPopState);
+        window.addEventListener('popstate', this._onPopState, true);
       } else if (event === 'hashchange') {
-        window.addEventListener('hashchange', this._onHashChange);
+        window.addEventListener('hashchange', this._onHashChange, true);
       }
+    }
+
+    // Hash mode: add a separate capture-phase hashchange suppressor.
+    // When we handle a popstate for our own entry, we set a flag so the
+    // subsequent hashchange (which the browser fires automatically on
+    // back/forward through hash entries) is also suppressed.
+    if (this._config.mode === 'hash') {
+      window.addEventListener('hashchange', this._onHashChangeSuppressor, true);
     }
 
     // Start polling
@@ -452,9 +462,10 @@ export class QueryRouter {
   destroy() {
     this._started = false;
 
-    // Remove DOM event listeners
-    window.removeEventListener('popstate', this._onPopState);
-    window.removeEventListener('hashchange', this._onHashChange);
+    // Remove DOM event listeners (must match capture phase from start())
+    window.removeEventListener('popstate', this._onPopState, true);
+    window.removeEventListener('hashchange', this._onHashChange, true);
+    window.removeEventListener('hashchange', this._onHashChangeSuppressor, true);
 
     // Stop polling
     if (this._pollTimerId != null) {
@@ -613,23 +624,60 @@ export class QueryRouter {
 
   /**
    * Handle popstate events (back/forward button).
-   * Deferred by one tick to let the host SPA settle first.
+   *
+   * Registered in capture phase so we fire before host handlers. If the
+   * history entry is ours (has our stateKey), we stopImmediatePropagation
+   * to prevent the host's popstate handler from seeing it and crashing.
+   * We also reconcile immediately for our entries (no deferral needed).
+   *
+   * For entries that aren't ours, we defer by one tick to let the host
+   * settle, then check if we need to react (e.g., host navigated away).
    */
   _handlePopState(event) {
-    // Defer to let host SPA's own popstate handlers run first.
-    // Always force re-evaluation — popstate means the user navigated browser
-    // history, which is always significant even if the path looks unchanged
-    // (they may have gone away and come back).
-    setTimeout(() => {
+    const stateKey = this._strategy._stateKey;
+    const isOurs = event.state?.[stateKey] !== undefined;
+
+    if (isOurs) {
+      // Suppress before host handlers see it
+      event.stopImmediatePropagation();
+
+      // In hash mode, also suppress the subsequent hashchange event
+      if (this._config.mode === 'hash') {
+        this._suppressNextHashChange = true;
+      }
+
+      // Handle immediately — no need to defer for our own entries
       this._reconcile(event, 'popstate', /* force */ true);
-    }, 0);
+    } else {
+      // Not our entry — defer to let host SPA handle it, then check
+      // if we need to react (e.g., host navigated away, we're displaced)
+      setTimeout(() => {
+        this._reconcile(event, 'popstate', /* force */ false);
+      }, 0);
+    }
   }
 
   /**
    * Handle hashchange events (hash mode).
+   * Registered in capture phase.
    */
   _handleHashChange() {
     this._reconcile(null, 'hashchange');
+  }
+
+  /**
+   * Suppress hashchange events that follow our own popstate handling.
+   *
+   * When the user navigates back/forward through hash-based history entries
+   * created via pushState, the browser fires both popstate AND hashchange.
+   * We handle the navigation in popstate and suppress the hashchange to
+   * prevent the host's hashchange listener from reacting to our hash.
+   */
+  _handleHashChangeSuppressor(event) {
+    if (this._suppressNextHashChange) {
+      this._suppressNextHashChange = false;
+      event.stopImmediatePropagation();
+    }
   }
 
   /**

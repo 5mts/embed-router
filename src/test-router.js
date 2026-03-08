@@ -74,7 +74,7 @@ const historyMock = {
       historyIndex--;
       const entry = historyStack[historyIndex];
       popstateListeners.forEach(fn =>
-        fn({ state: entry.state, type: 'popstate' })
+        fn({ state: entry.state, type: 'popstate', stopImmediatePropagation() {} })
       );
     }
   },
@@ -84,7 +84,7 @@ const historyMock = {
       historyIndex = target;
       const entry = historyStack[historyIndex];
       popstateListeners.forEach(fn =>
-        fn({ state: entry.state, type: 'popstate' })
+        fn({ state: entry.state, type: 'popstate', stopImmediatePropagation() {} })
       );
     }
   },
@@ -103,11 +103,11 @@ const sessionStorageMock = {
 globalThis.window = {
   location: locationProxy,
   history: historyMock,
-  addEventListener(event, fn) {
+  addEventListener(event, fn, _capture) {
     if (event === 'popstate') popstateListeners.push(fn);
     if (event === 'hashchange') hashchangeListeners.push(fn);
   },
-  removeEventListener(event, fn) {
+  removeEventListener(event, fn, _capture) {
     if (event === 'popstate') popstateListeners = popstateListeners.filter(f => f !== fn);
     if (event === 'hashchange') hashchangeListeners = hashchangeListeners.filter(f => f !== fn);
   },
