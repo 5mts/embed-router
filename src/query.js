@@ -14,6 +14,9 @@
  *   → We write a backup to history.state which survives back/forward
  * - Optional interference detection to warn when params are stripped
  */
+
+import { safePushState, safeReplaceState } from './history.js';
+
 export class QueryStringStrategy {
   /**
    * @param {object} config
@@ -82,9 +85,9 @@ export class QueryStringStrategy {
     const state = { ...window.history.state, [this._stateKey]: path };
 
     if (mode === 'replace') {
-      window.history.replaceState(state, '', href);
+      safeReplaceState(state, '', href);
     } else {
-      window.history.pushState(state, '', href);
+      safePushState(state, '', href);
     }
   }
 

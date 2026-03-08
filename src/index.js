@@ -13,3 +13,4 @@
 export { QueryRouter, snapshotUrl } from './router.js';
 export { compileRoute, compileRoutes, matchRoute, buildPath } from './matcher.js';
 export { normalizePath, isPathSafe } from './normalize.js';
+export { safePushState, safeReplaceState, capture as captureHistoryApi } from './history.js';

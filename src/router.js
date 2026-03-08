@@ -52,6 +52,7 @@
 
 import { HashStrategy } from './hash.js';
 import { QueryStringStrategy } from './query.js';
+import { safeReplaceState } from './history.js';
 import { compileRoutes, matchRoute, buildPath } from './matcher.js';
 import { migrateLegacyUrl, removeLegacyParams } from './legacy.js';
 import { normalizePath, isPathSafe } from './normalize.js';
@@ -599,7 +600,7 @@ export class QueryRouter {
       for (const param of migration.matchedParams) {
         finalUrl.searchParams.delete(param);
       }
-      window.history.replaceState(window.history.state, '', finalUrl.toString());
+      safeReplaceState(window.history.state, '', finalUrl.toString());
 
       this._log('Legacy URL migrated', {
         from: migration.matchedParams,

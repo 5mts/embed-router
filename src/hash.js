@@ -1,13 +1,16 @@
 /**
  * Hash URL Strategy
- * 
+ *
  * Reads/writes route paths from location.hash.
  * Example: #/city-council/candidate/harper
- * 
+ *
  * This is the simpler strategy — the hash is entirely ours and no host
  * application will interfere with it (unless the host also uses hash routing,
  * in which case you should use the query string strategy instead).
  */
+
+import { safePushState, safeReplaceState } from './history.js';
+
 export class HashStrategy {
   constructor(config) {
     this.needsInterferenceDetection = false;
@@ -48,9 +51,9 @@ export class HashStrategy {
     const state = { ...window.history.state, [this._stateKey]: path };
 
     if (mode === 'replace') {
-      window.history.replaceState(state, '', url);
+      safeReplaceState(state, '', url);
     } else {
-      window.history.pushState(state, '', url);
+      safePushState(state, '', url);
     }
   }
 
