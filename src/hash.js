@@ -20,11 +20,14 @@ export class HashStrategy {
 
   /**
    * Read the current route path from the URL hash.
-   * @returns {string} path, e.g. "/city-council/candidate/harper"
+   * Returns null if no embed route is present (empty hash, bare #, or #/).
+   * This allows the initial route resolution to fall through to other
+   * sources (goingTo cue, history.state, default route).
+   * @returns {string|null}
    */
   read() {
     const hash = window.location.hash;
-    if (!hash || hash === '#') return '/';
+    if (!hash || hash === '#' || hash === '#/') return null;
     // Strip leading # (and optional leading #/)
     const path = hash.slice(1);
     return path.startsWith('/') ? path : '/' + path;

@@ -392,6 +392,25 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — Hash mode empty hash returns default route');
+resetMocks();
+{
+  // No hash in URL — should fall through to default route
+  historyStack[0].url = 'https://example.com/voterguide';
+  const router = new QueryRouter({ mode: 'hash', routes });
+  assertEqual(router.getRoute().name, 'home', 'empty hash defaults to /');
+  router.destroy();
+}
+
+section('QueryRouter — Hash mode bare # returns default route');
+resetMocks();
+{
+  historyStack[0].url = 'https://example.com/voterguide#';
+  const router = new QueryRouter({ mode: 'hash', routes });
+  assertEqual(router.getRoute().name, 'home', 'bare # defaults to /');
+  router.destroy();
+}
+
 section('QueryRouter — Multi-embed with id prefix');
 resetMocks();
 {
