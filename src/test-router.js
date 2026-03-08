@@ -538,12 +538,27 @@ resetMocks();
   router2.destroy();
 }
 
+// Helper to read goingTo path from JSON-formatted sessionStorage
+function readGoingToPath(key) {
+  const raw = sessionStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw).path;
+  } catch {
+    return raw; // legacy bare string
+  }
+}
+
 section('QueryRouter — storeGoingTo writes to sessionStorage');
 resetMocks();
 {
   const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
   router.storeGoingTo('/city-council/candidate/harper');
-  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council/candidate/harper', 'stores normalized path');
+  assertEqual(readGoingToPath('__er_goingTo'), '/city-council/candidate/harper', 'stores normalized path');
+  // Verify JSON format with timestamp
+  const raw = JSON.parse(sessionStorage.getItem('__er_goingTo'));
+  assert(typeof raw.ts === 'number', 'includes timestamp');
+  assert(Date.now() - raw.ts < 1000, 'timestamp is recent');
   router.destroy();
 }
 
@@ -552,7 +567,7 @@ resetMocks();
 {
   const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
   router.storeGoingTo('candidate', { section: 'city-council', candidate: 'harper' });
-  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council/candidate/harper', 'resolves named route');
+  assertEqual(readGoingToPath('__er_goingTo'), '/city-council/candidate/harper', 'resolves named route');
   router.destroy();
 }
 
@@ -561,7 +576,7 @@ resetMocks();
 {
   const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes, id: 'a' });
   router.storeGoingTo('/city-council');
-  assertEqual(sessionStorage.getItem('__er_goingTo_a'), '/city-council', 'uses namespaced key');
+  assertEqual(readGoingToPath('__er_goingTo_a'), '/city-council', 'uses namespaced key');
   assertEqual(sessionStorage.getItem('__er_goingTo'), null, 'does not use default key');
   router.destroy();
 }
@@ -569,8 +584,11 @@ resetMocks();
 section('QueryRouter — Init from goingTo cue (highest priority)');
 resetMocks();
 {
-  // goingTo cue is set (simulating a reload-mode navigation)
-  sessionStorage.setItem('__er_goingTo', '/city-council/candidate/harper');
+  // goingTo cue is set (simulating a reload-mode navigation) — use JSON format
+  sessionStorage.setItem('__er_goingTo', JSON.stringify({
+    path: '/city-council/candidate/harper',
+    ts: Date.now(),
+  }));
   // URL has a different route
   historyStack[0].url = 'https://example.com/voterguide?route=/';
 
@@ -587,17 +605,44 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — Init from goingTo cue (legacy bare string format)');
+resetMocks();
+{
+  // Legacy format: bare string (no JSON)
+  sessionStorage.setItem('__er_goingTo', '/city-council');
+  historyStack[0].url = 'https://example.com/voterguide';
+
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
+  assertEqual(router.getRoute().name, 'section', 'legacy bare string goingTo works');
+  assertEqual(router.getRoute().params.section, 'city-council', 'correct params from legacy goingTo');
+  router.destroy();
+}
+
+section('QueryRouter — Init ignores expired goingTo cue');
+resetMocks();
+{
+  // goingTo cue with timestamp > 10 seconds ago
+  sessionStorage.setItem('__er_goingTo', JSON.stringify({
+    path: '/city-council/candidate/harper',
+    ts: Date.now() - 15_000, // 15 seconds ago
+  }));
+  historyStack[0].url = 'https://example.com/voterguide?route=/school-board';
+
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
+  // Should ignore expired goingTo and use URL instead
+  assertEqual(router.getRoute().name, 'section', 'expired goingTo ignored');
+  assertEqual(router.getRoute().params.section, 'school-board', 'falls through to URL');
+  router.destroy();
+}
+
 section('QueryRouter — reload navigate stores goingTo');
 resetMocks();
 {
   const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes, pollInterval: 0 });
   router.start();
 
-  // storeGoingTo is called internally by navigate() in reload mode.
-  // We can't easily test location.href in Node mocks, but we can verify
-  // that the goingTo cue is written before the reload would happen.
   router.storeGoingTo('/city-council');
-  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council', 'goingTo cue written by navigate');
+  assertEqual(readGoingToPath('__er_goingTo'), '/city-council', 'goingTo cue written by navigate');
   router.destroy();
 }
 

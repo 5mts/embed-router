@@ -441,7 +441,10 @@ export class QueryRouter {
     const normalized = this._normalize(path);
     if (!normalized) return;
     try {
-      sessionStorage.setItem(this._goingToKey, normalized);
+      sessionStorage.setItem(this._goingToKey, JSON.stringify({
+        path: normalized,
+        ts: Date.now(),
+      }));
       this._log('Stored goingTo cue', normalized);
     } catch (e) {
       this._log('Failed to write goingTo cue', e);
@@ -623,12 +626,30 @@ export class QueryRouter {
     //    Highest priority: if present, the user just clicked a reload-mode link
     //    and the page reloaded. The URL may not reflect the intended route yet.
     try {
-      const goingTo = sessionStorage.getItem(this._goingToKey);
-      if (goingTo) {
+      const raw = sessionStorage.getItem(this._goingToKey);
+      if (raw) {
         sessionStorage.removeItem(this._goingToKey);
-        path = goingTo;
-        source = 'goingTo';
-        this._log('goingTo cue found in sessionStorage', path);
+        // Parse JSON format { path, ts }. Handle legacy bare-string format gracefully.
+        let goingToPath;
+        let expired = false;
+        try {
+          const parsed = JSON.parse(raw);
+          goingToPath = parsed.path;
+          // Expire stale cues (> 10 seconds old)
+          if (parsed.ts && Date.now() - parsed.ts > 10_000) {
+            expired = true;
+          }
+        } catch {
+          // Legacy bare string format (no JSON)
+          goingToPath = raw;
+        }
+        if (goingToPath && !expired) {
+          path = goingToPath;
+          source = 'goingTo';
+          this._log('goingTo cue found in sessionStorage', path);
+        } else if (expired) {
+          this._log('goingTo cue expired, ignoring', goingToPath);
+        }
       }
     } catch (e) {
       // sessionStorage may be unavailable (private browsing, etc.)
