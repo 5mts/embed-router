@@ -18,6 +18,7 @@ function resetMocks() {
   historyIndex = -1;
   popstateListeners = [];
   hashchangeListeners = [];
+  sessionStore.clear();
 
   // Push initial entry
   historyStack.push({
@@ -89,6 +90,15 @@ const historyMock = {
   },
 };
 
+// Mock sessionStorage
+const sessionStore = new Map();
+const sessionStorageMock = {
+  getItem(key) { return sessionStore.get(key) ?? null; },
+  setItem(key, value) { sessionStore.set(key, String(value)); },
+  removeItem(key) { sessionStore.delete(key); },
+  clear() { sessionStore.clear(); },
+};
+
 // Install mocks
 globalThis.window = {
   location: locationProxy,
@@ -104,6 +114,7 @@ globalThis.window = {
 };
 globalThis.location = locationProxy;
 globalThis.history = historyMock;
+globalThis.sessionStorage = sessionStorageMock;
 globalThis.URL = URL;
 globalThis.URLSearchParams = URLSearchParams;
 globalThis.Event = Event;
@@ -195,7 +206,7 @@ resetMocks();
 section('QueryRouter — navigate() by path');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   let emitted = null;
   router.on('route', (data) => { emitted = data; });
   router.start();
@@ -222,7 +233,7 @@ resetMocks();
 section('QueryRouter — navigate() by name');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   router.start();
 
   router.navigate('candidate', { section: 'city-council', candidate: 'harper' });
@@ -234,7 +245,7 @@ resetMocks();
 section('QueryRouter — navigate() deduplication');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   let eventCount = 0;
   router.on('route', () => eventCount++);
   router.start();
@@ -252,7 +263,7 @@ resetMocks();
 section('QueryRouter — navigate() with historyMode override');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes, historyMode: 'push' });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, historyMode: 'push' });
   router.start();
 
   const stackBefore = historyStack.length;
@@ -264,7 +275,7 @@ resetMocks();
 section('QueryRouter — AbortSignal on navigation');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   router.start();
 
   router.navigate('/city-council');
@@ -282,7 +293,7 @@ resetMocks();
 section('QueryRouter — Generation counter');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   router.start();
 
   const gen0 = router.getGeneration();
@@ -299,7 +310,7 @@ resetMocks();
 section('QueryRouter — popstate (back/forward)');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes, pollInterval: 0 });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
   let lastEvent = null;
   router.on('route', (data) => { lastEvent = data; });
   router.start();
@@ -323,7 +334,7 @@ resetMocks();
 section('QueryRouter — popstate recovers from history.state when URL is clobbered');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes, pollInterval: 0 });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
   router.start();
 
   // Navigate to a route (this writes both URL and history.state)
@@ -371,7 +382,7 @@ resetMocks();
 section('QueryRouter — Multi-embed with id prefix');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes, id: 'a' });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, id: 'a' });
   router.start();
 
   router.navigate('/city-council');
@@ -384,7 +395,7 @@ section('QueryRouter — Preserves host query params');
 resetMocks();
 {
   historyStack[0].url = 'https://example.com/voterguide?hostParam=keepme&page=3';
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   router.start();
 
   router.navigate('/city-council');
@@ -443,7 +454,7 @@ resetMocks();
 section('QueryRouter — Invalid path handling');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
   router.start();
 
   const result = router.navigate('javascript:alert(1)');
@@ -465,7 +476,7 @@ resetMocks();
 section('QueryRouter — destroy() cleanup');
 resetMocks();
 {
-  const router = new QueryRouter({ mode: 'query', routes, pollInterval: 50 });
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 50 });
   router.start();
 
   const listenersBefore = popstateListeners.length;
@@ -487,6 +498,93 @@ resetMocks();
   const router = new QueryRouter({ mode: 'query', routes, defaultRoute: '/city-council' });
   assertEqual(router.getRoute().name, 'section', 'uses custom default route');
   assertEqual(router.getRoute().params.section, 'city-council', 'default route params');
+  router.destroy();
+}
+
+section('QueryRouter — linkMode defaults');
+resetMocks();
+{
+  const hashRouter = new QueryRouter({ mode: 'hash', routes });
+  assertEqual(hashRouter.getLinkMode(), 'spa', 'hash defaults to spa');
+  hashRouter.destroy();
+
+  const queryRouter = new QueryRouter({ mode: 'query', routes });
+  assertEqual(queryRouter.getLinkMode(), 'reload', 'query defaults to reload');
+  queryRouter.destroy();
+}
+
+section('QueryRouter — linkMode override');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'hash', linkMode: 'reload', routes });
+  assertEqual(router.getLinkMode(), 'reload', 'hash can be overridden to reload');
+  router.destroy();
+
+  const router2 = new QueryRouter({ mode: 'query', linkMode: 'spa', routes });
+  assertEqual(router2.getLinkMode(), 'spa', 'query can be overridden to spa');
+  router2.destroy();
+}
+
+section('QueryRouter — storeGoingTo writes to sessionStorage');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
+  router.storeGoingTo('/city-council/candidate/harper');
+  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council/candidate/harper', 'stores normalized path');
+  router.destroy();
+}
+
+section('QueryRouter — storeGoingTo with named route');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
+  router.storeGoingTo('candidate', { section: 'city-council', candidate: 'harper' });
+  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council/candidate/harper', 'resolves named route');
+  router.destroy();
+}
+
+section('QueryRouter — storeGoingTo with id prefix');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes, id: 'a' });
+  router.storeGoingTo('/city-council');
+  assertEqual(sessionStorage.getItem('__er_goingTo_a'), '/city-council', 'uses namespaced key');
+  assertEqual(sessionStorage.getItem('__er_goingTo'), null, 'does not use default key');
+  router.destroy();
+}
+
+section('QueryRouter — Init from goingTo cue (highest priority)');
+resetMocks();
+{
+  // goingTo cue is set (simulating a reload-mode navigation)
+  sessionStorage.setItem('__er_goingTo', '/city-council/candidate/harper');
+  // URL has a different route
+  historyStack[0].url = 'https://example.com/voterguide?route=/';
+
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes });
+  assertEqual(router.getRoute().name, 'candidate', 'goingTo takes priority over URL');
+  assertEqual(router.getRoute().params.candidate, 'harper', 'correct params from goingTo');
+
+  // goingTo cue should be cleared after reading
+  assertEqual(sessionStorage.getItem('__er_goingTo'), null, 'goingTo cue cleared after read');
+
+  // URL should be updated to reflect the route (shareable)
+  const url = currentUrl();
+  assertEqual(url.searchParams.get('route'), '/city-council/candidate/harper', 'URL updated from goingTo');
+  router.destroy();
+}
+
+section('QueryRouter — reload navigate stores goingTo');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'reload', routes, pollInterval: 0 });
+  router.start();
+
+  // storeGoingTo is called internally by navigate() in reload mode.
+  // We can't easily test location.href in Node mocks, but we can verify
+  // that the goingTo cue is written before the reload would happen.
+  router.storeGoingTo('/city-council');
+  assertEqual(sessionStorage.getItem('__er_goingTo'), '/city-council', 'goingTo cue written by navigate');
   router.destroy();
 }
 

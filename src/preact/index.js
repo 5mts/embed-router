@@ -224,18 +224,23 @@ export function Route({ path, component, fallback = false }) {
 
 /**
  * Navigation link component.
- * 
- * Renders an <a> tag with the correct href for accessibility and right-click
- * behavior, but intercepts clicks to use the router's navigate() method
- * (no page reload).
- * 
- * Supports both path strings and named routes:
- * 
- *   <Link to="/city-council/candidate/harper">View</Link>
- *   <Link to="candidate" params={{ section: 'city-council', candidate: 'harper' }}>View</Link>
- * 
- * Adds an `aria-current="page"` attribute when the link matches the current route.
- * 
+ *
+ * Behavior depends on the router's linkMode:
+ *
+ * **SPA mode** (default for hash): Renders an <a> tag with a correct href for
+ * accessibility and right-click behavior. Left-clicks are intercepted with
+ * preventDefault + stopPropagation (to isolate from host page event delegation)
+ * and routed through the router's navigate() method (no page reload).
+ *
+ * **Reload mode** (default for query): Renders a plain <a> tag with the correct
+ * href. Clicks are NOT intercepted — the browser follows the link naturally,
+ * triggering a full page reload. Before the reload, the intended route is stored
+ * in sessionStorage (goingTo cue) so the router can read it on the next load
+ * even if the CMS hasn't updated the URL yet.
+ *
+ * All links include `data-excludelink="true"` as an escape hatch for CMS
+ * platforms (e.g. WPR) that check this attribute to skip link interception.
+ *
  * @param {{ to: string, params?: object, replace?: boolean, class?: string, activeClass?: string, children: any, [key: string]: any }} props
  */
 export function Link({ to, params: linkParams, replace = false, class: className, activeClass, children, ...rest }) {
@@ -272,7 +277,26 @@ export function Link({ to, params: linkParams, replace = false, class: className
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) {
       return;
     }
+
+    if (router.getLinkMode() === 'reload') {
+      // Reload mode: store the goingTo cue so the next page load knows the
+      // intended route. Do NOT preventDefault — let the browser follow the
+      // <a href> naturally, triggering a full page reload.
+      if (linkParams) {
+        router.storeGoingTo(to, linkParams);
+      } else {
+        router.storeGoingTo(to);
+      }
+      // stopPropagation to prevent host page event delegation from
+      // intercepting the click and running its own page transition logic.
+      e.stopPropagation();
+      return;
+    }
+
+    // SPA mode: intercept click, navigate without page reload.
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
 
     const options = replace ? { historyMode: 'replace' } : {};
     if (linkParams) {
@@ -287,6 +311,7 @@ export function Link({ to, params: linkParams, replace = false, class: className
     {
       href,
       onClick: handleClick,
+      'data-excludelink': 'true',
       class: classes,
       'aria-current': isActive ? 'page' : undefined,
       ...rest,

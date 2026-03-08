@@ -91,6 +91,10 @@ export class QueryRouter {
    * @param {Array<{ path: string, name?: string }>} config.routes - route definitions (order matters)
    * @param {string} [config.param='route'] - query param name (query mode only)
    * @param {string|null} [config.id=null] - multi-embed prefix, e.g. 'a' → 'a.route'
+   * @param {'spa'|'reload'} [config.linkMode] - how navigation happens. 'spa' intercepts clicks
+   *   and navigates without page reload. 'reload' lets the browser follow links naturally,
+   *   storing the intended route in sessionStorage so the next page load picks it up.
+   *   Defaults to 'spa' for hash mode, 'reload' for query mode.
    * @param {'push'|'replace'} [config.historyMode='push'] - default history behavior
    * @param {string} [config.defaultRoute='/'] - fallback when no route matches
    * @param {Array<{ params: string[], path?: string, toPath?: Function }>} [config.legacyRoutes] - legacy URL migration
@@ -106,10 +110,12 @@ export class QueryRouter {
     }
 
     // --- Config ---
+    const mode = config.mode || 'query';
     this._config = {
-      mode: config.mode || 'query',
+      mode,
       param: config.param || 'route',
       id: config.id || null,
+      linkMode: config.linkMode || (mode === 'hash' ? 'spa' : 'reload'),
       historyMode: config.historyMode || 'push',
       defaultRoute: config.defaultRoute || '/',
       pollInterval: config.pollInterval ?? 100,
@@ -117,6 +123,11 @@ export class QueryRouter {
       normalizeRoute: config.normalizeRoute || normalizePath,
       onHostInterference: config.onHostInterference || null,
     };
+
+    // --- sessionStorage key for goingTo cue (reload mode) ---
+    this._goingToKey = this._config.id
+      ? `__er_goingTo_${this._config.id}`
+      : '__er_goingTo';
 
     // --- State key for history.state (namespaced if multi-embed) ---
     const stateKey = this._config.id
@@ -253,6 +264,19 @@ export class QueryRouter {
       return false;
     }
 
+    // Reload mode (programmatic): store the goingTo cue and trigger a full
+    // page reload. The Link component handles this differently — it calls
+    // storeGoingTo() directly and lets the browser follow the <a href>.
+    if (this._config.linkMode === 'reload') {
+      this.storeGoingTo(normalized);
+      const url = this.buildUrl(normalized);
+      this._log('Reload navigate', { path: normalized, url });
+      window.location.href = url;
+      return true;
+    }
+
+    // --- SPA mode below ---
+
     // Match route
     const matched = matchRoute(this._compiledRoutes, normalized);
     const route = matched || { ...NOT_FOUND, path: normalized };
@@ -364,6 +388,41 @@ export class QueryRouter {
   }
 
   /**
+   * Get the current link mode ('spa' or 'reload').
+   * @returns {'spa'|'reload'}
+   */
+  getLinkMode() {
+    return this._config.linkMode;
+  }
+
+  /**
+   * Store a goingTo cue in sessionStorage for reload-mode navigation.
+   *
+   * Used by the Link component in reload mode: it calls this before letting
+   * the browser follow the <a href> naturally. On the next page load, the
+   * router reads the cue in _resolveInitialRoute() to render the correct route.
+   *
+   * @param {string} pathOrName - path string or route name
+   * @param {object} [params] - if first arg is a route name, the params to fill in
+   */
+  storeGoingTo(pathOrName, params) {
+    let path;
+    if (params && typeof params === 'object') {
+      path = buildPath(this._compiledRoutes, pathOrName, params);
+    } else {
+      path = pathOrName;
+    }
+    const normalized = this._normalize(path);
+    if (!normalized) return;
+    try {
+      sessionStorage.setItem(this._goingToKey, normalized);
+      this._log('Stored goingTo cue', normalized);
+    } catch (e) {
+      this._log('Failed to write goingTo cue', e);
+    }
+  }
+
+  /**
    * Subscribe to route change events.
    * 
    * @param {'route'} event
@@ -419,6 +478,7 @@ export class QueryRouter {
   /**
    * Resolve the initial route on construction.
    * Order of precedence:
+   *   0. goingTo sessionStorage cue (reload-mode navigation intent)
    *   1. URL snapshot (if provided) or current URL
    *   2. history.state backup
    *   3. Legacy URL migration
@@ -428,8 +488,23 @@ export class QueryRouter {
     let path = null;
     let source = 'default';
 
+    // 0. Check sessionStorage goingTo cue (reload-mode navigation handoff).
+    //    Highest priority: if present, the user just clicked a reload-mode link
+    //    and the page reloaded. The URL may not reflect the intended route yet.
+    try {
+      const goingTo = sessionStorage.getItem(this._goingToKey);
+      if (goingTo) {
+        sessionStorage.removeItem(this._goingToKey);
+        path = goingTo;
+        source = 'goingTo';
+        this._log('goingTo cue found in sessionStorage', path);
+      }
+    } catch (e) {
+      // sessionStorage may be unavailable (private browsing, etc.)
+    }
+
     // 1. Try reading from URL (snapshot or current)
-    if (this._initialUrl) {
+    if (!path && this._initialUrl) {
       // Parse the snapshot to extract our route
       path = this._readFromSnapshot(this._initialUrl);
       if (path) source = 'url-snapshot';
@@ -472,9 +547,9 @@ export class QueryRouter {
     const matched = matchRoute(this._compiledRoutes, finalPath);
     this._currentRoute = matched || { ...NOT_FOUND, path: finalPath };
 
-    // If we resolved from history.state but URL doesn't have our param,
-    // write it to URL so the user sees the correct URL and can share it
-    if (source === 'history-state') {
+    // If we resolved from a non-URL source, write the route to the URL
+    // so the user sees the correct URL and can share it
+    if (source === 'goingTo' || source === 'history-state') {
       try {
         this._strategy.write(finalPath, 'replace');
       } catch (e) {
