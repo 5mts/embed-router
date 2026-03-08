@@ -193,31 +193,11 @@ export class QueryRouter {
     if (this._started) return;
     this._started = true;
 
-    // Attach event listeners — capture phase so we fire before host handlers
-    for (const event of this._strategy.events) {
-      if (event === 'popstate') {
-        window.addEventListener('popstate', this._onPopState, true);
-      } else if (event === 'hashchange') {
-        window.addEventListener('hashchange', this._onHashChange, true);
-      }
-    }
-
-    // Hash mode: add a separate capture-phase hashchange suppressor.
-    // When we handle a popstate for our own entry, we set a flag so the
-    // subsequent hashchange (which the browser fires automatically on
-    // back/forward through hash entries) is also suppressed.
-    if (this._config.mode === 'hash') {
-      window.addEventListener('hashchange', this._onHashChangeSuppressor, true);
-    }
+    this._addStrategyListeners();
 
     // Start polling
     this._lastWatchValue = this._strategy.getWatchValue();
-    if (this._config.pollInterval > 0) {
-      this._pollTimerId = setInterval(
-        () => this._poll(),
-        this._config.pollInterval
-      );
-    }
+    this._startPolling();
 
     // Emit initial route
     this._emitter.emit('route', {
@@ -454,24 +434,80 @@ export class QueryRouter {
   }
 
   /**
+   * Reconfigure the router's URL strategy and/or link mode at runtime.
+   *
+   * Typically called after the first API response provides the embed's
+   * server-side configuration. The current route is preserved — only
+   * the URL representation changes.
+   *
+   * @param {object} config
+   * @param {'hash'|'query'} [config.mode] - new URL strategy
+   * @param {'spa'|'reload'} [config.linkMode] - new link mode
+   * @returns {boolean} true if any configuration changed
+   */
+  reconfigure({ mode, linkMode } = {}) {
+    const currentPath = this._currentRoute.path;
+    let changed = false;
+
+    if (linkMode && linkMode !== this._config.linkMode) {
+      this._config.linkMode = linkMode;
+      changed = true;
+      this._log('Reconfigured linkMode', linkMode);
+    }
+
+    if (mode && mode !== this._config.mode) {
+      // Tear down current strategy's listeners and polling
+      if (this._started) {
+        this._removeStrategyListeners();
+        this._stopPolling();
+      }
+
+      // Switch strategy
+      this._config.mode = mode;
+      const strategyConfig = {
+        param: this._config.param,
+        id: this._config.id,
+        stateKey: this._strategy._stateKey,
+        debug: this._config.debug,
+      };
+      this._strategy = mode === 'hash'
+        ? new HashStrategy(strategyConfig)
+        : new QueryStringStrategy(strategyConfig);
+
+      // Re-register listeners if started
+      if (this._started) {
+        this._addStrategyListeners();
+        this._startPolling();
+      }
+
+      // Rewrite URL under new strategy (replaceState, no new history entry)
+      if (currentPath && currentPath !== '/') {
+        try {
+          this._strategy.write(currentPath, 'replace');
+        } catch (e) {
+          this._log('Failed to rewrite URL after reconfigure', e);
+        }
+      }
+
+      this._lastWatchValue = this._strategy.getWatchValue();
+      changed = true;
+      this._log('Reconfigured mode', mode);
+    }
+
+    return changed;
+  }
+
+  /**
    * Full cleanup. Removes all event listeners, clears polling interval,
    * aborts in-flight work, and removes all subscribers.
-   * 
+   *
    * Call this when the embed is being unmounted/destroyed.
    */
   destroy() {
     this._started = false;
 
-    // Remove DOM event listeners (must match capture phase from start())
-    window.removeEventListener('popstate', this._onPopState, true);
-    window.removeEventListener('hashchange', this._onHashChange, true);
-    window.removeEventListener('hashchange', this._onHashChangeSuppressor, true);
-
-    // Stop polling
-    if (this._pollTimerId != null) {
-      clearInterval(this._pollTimerId);
-      this._pollTimerId = null;
-    }
+    this._removeStrategyListeners();
+    this._stopPolling();
 
     // Abort any in-flight work
     if (this._abortController) {
@@ -486,6 +522,54 @@ export class QueryRouter {
   }
 
   // ===== PRIVATE =====
+
+  /**
+   * Register event listeners for the current strategy (capture phase).
+   */
+  _addStrategyListeners() {
+    for (const event of this._strategy.events) {
+      if (event === 'popstate') {
+        window.addEventListener('popstate', this._onPopState, true);
+      } else if (event === 'hashchange') {
+        window.addEventListener('hashchange', this._onHashChange, true);
+      }
+    }
+    // Hash mode: hashchange suppressor for back/forward through our entries
+    if (this._config.mode === 'hash') {
+      window.addEventListener('hashchange', this._onHashChangeSuppressor, true);
+    }
+  }
+
+  /**
+   * Remove event listeners for the current strategy (capture phase).
+   */
+  _removeStrategyListeners() {
+    window.removeEventListener('popstate', this._onPopState, true);
+    window.removeEventListener('hashchange', this._onHashChange, true);
+    window.removeEventListener('hashchange', this._onHashChangeSuppressor, true);
+  }
+
+  /**
+   * Start the URL change polling interval.
+   */
+  _startPolling() {
+    if (this._config.pollInterval > 0) {
+      this._pollTimerId = setInterval(
+        () => this._poll(),
+        this._config.pollInterval
+      );
+    }
+  }
+
+  /**
+   * Stop the URL change polling interval.
+   */
+  _stopPolling() {
+    if (this._pollTimerId != null) {
+      clearInterval(this._pollTimerId);
+      this._pollTimerId = null;
+    }
+  }
 
   /**
    * Resolve the initial route on construction.

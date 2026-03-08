@@ -588,6 +588,49 @@ resetMocks();
   router.destroy();
 }
 
+section('QueryRouter — reconfigure() switches mode');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'query', linkMode: 'spa', routes, pollInterval: 0 });
+  router.start();
+
+  router.navigate('/city-council/candidate/harper');
+  assertEqual(currentUrl().searchParams.get('route'), '/city-council/candidate/harper', 'query mode writes param');
+
+  // Reconfigure to hash mode
+  const changed = router.reconfigure({ mode: 'hash' });
+  assert(changed, 'reconfigure returns true when mode changes');
+  assertEqual(currentUrl().hash, '#/city-council/candidate/harper', 'rewrites URL under new strategy');
+  assertEqual(router.getRoute().name, 'candidate', 'current route preserved');
+
+  // Navigate under new mode
+  router.navigate('/school-board');
+  assertEqual(currentUrl().hash, '#/school-board', 'new navigations use hash mode');
+
+  router.destroy();
+}
+
+section('QueryRouter — reconfigure() switches linkMode');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'hash', linkMode: 'spa', routes, pollInterval: 0 });
+  assertEqual(router.getLinkMode(), 'spa', 'starts in spa mode');
+
+  const changed = router.reconfigure({ linkMode: 'reload' });
+  assert(changed, 'reconfigure returns true when linkMode changes');
+  assertEqual(router.getLinkMode(), 'reload', 'linkMode updated');
+  router.destroy();
+}
+
+section('QueryRouter — reconfigure() no-op when nothing changes');
+resetMocks();
+{
+  const router = new QueryRouter({ mode: 'hash', linkMode: 'spa', routes, pollInterval: 0 });
+  const changed = router.reconfigure({ mode: 'hash', linkMode: 'spa' });
+  assert(!changed, 'reconfigure returns false when nothing changes');
+  router.destroy();
+}
+
 // ===== SUMMARY =====
 
 console.log(`\n${'='.repeat(40)}`);
