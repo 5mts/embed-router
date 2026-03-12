@@ -20,7 +20,7 @@
 
 - **`restart()`** — Re-emit the current route for subscribers when the embed re-mounts without a full page reload. Falls through to `start()` if not yet started.
 
-- **`navigationComplete(options)`** — Signal that rendering is complete after a navigation. Scrolls the embed into view (only upward), dispatches an `electupLoaded` CustomEvent on `document`, and emits `navigationComplete` on the router's emitter.
+- **`navigationComplete(options)`** — Signal that rendering is complete after a navigation. Scrolls the embed into view (only upward), dispatches an `embedRouterLoaded` CustomEvent on `document`, and emits `navigationComplete` on the router's emitter.
 
 - **`embedId` config** — DOM element ID of the embed container, used by `navigationComplete()` for scroll targeting and event detail.
 

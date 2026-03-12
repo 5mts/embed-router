@@ -22,7 +22,7 @@
     "preact",
     "client-side-routing"
   ],
-  "author": "David Purdy",
+  "author": "Five Mountains",
   "license": "GPL-3.0",
   "peerDependencies": {
     "preact": ">=10.0.0"

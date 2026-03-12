@@ -428,7 +428,7 @@ export class QueryRouter {
   /**
    * Signal that the application has finished rendering after a navigation.
    * Triggers post-navigation behaviors: scroll-to-embed and the
-   * electupLoaded custom event.
+   * embedRouterLoaded custom event.
    *
    * Call this from your app after data fetching + rendering is complete.
    *
@@ -452,7 +452,7 @@ export class QueryRouter {
 
     // Emit loaded event for host page / iframe parent integration
     if (typeof document !== 'undefined' && typeof CustomEvent !== 'undefined') {
-      document.dispatchEvent(new CustomEvent('electupLoaded', {
+      document.dispatchEvent(new CustomEvent('embedRouterLoaded', {
         bubbles: false,
         detail: {
           path: this._currentRoute.path,

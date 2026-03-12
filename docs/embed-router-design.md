@@ -201,7 +201,7 @@ Solves the timing problem where the host page rewrites the URL asynchronously af
 ### Mechanism
 
 ```typescript
-const STORAGE_PREFIX = 'electup';
+const STORAGE_PREFIX = 'embedRouter';
 
 function storageKey(embedId: string): string {
   return `${STORAGE_PREFIX}_nav_${embedId}`;
@@ -300,7 +300,7 @@ This creates a temporary iframe to get an untouched `History.prototype`, then di
 Writes the embed route into the URL hash using `pushState`, which does **not** fire `hashchange`. This is the critical distinction — `location.hash = ...` fires `hashchange` and the host reacts, but `pushState` with a hash-containing URL does not.
 
 ```javascript
-const STATE_KEY = '__electup';
+const STATE_KEY = '__embedRouter';
 
 function writeRoute(path, push = true) {
   const hash = `#${config.prefix}:${path}`;
@@ -516,11 +516,11 @@ When the user hits back/forward, both the host's and the embed's `popstate` list
 
 ### Identifying embed entries
 
-Every `pushState` call from the adapter includes a state object with the `__electup` key and the embed ID:
+Every `pushState` call from the adapter includes a state object with the `__embedRouter` key and the embed ID:
 
 ```javascript
 safePushState({
-  __electup: true,
+  __embedRouter: true,
   embedId: config.embedId,
   path: '/race/123'
 }, '', url);
@@ -532,7 +532,7 @@ The `popstate` handler checks this:
 window.addEventListener('popstate', (event) => {
   if (config.linkMode !== 'spa') return; // reload mode doesn't use popstate
 
-  if (event.state?.__electup && event.state.embedId === config.embedId) {
+  if (event.state?.__embedRouter && event.state.embedId === config.embedId) {
     event.stopImmediatePropagation();
     routerCore.handleExternalNavigation(event.state.path);
   }
@@ -554,7 +554,7 @@ function writeRoute(path, push = true) {
   // Only touch our specific part — hash or one query param
   // Path and all other params are preserved
   url.hash = `${config.prefix}:${path}`;
-  safePushState({ __electup: true, embedId: config.embedId, path }, '', url.toString());
+  safePushState({ __embedRouter: true, embedId: config.embedId, path }, '', url.toString());
 }
 ```
 
@@ -566,7 +566,7 @@ When the host's `popstate` handler reads the URL, it sees its own path/params in
 let suppressNextHashChange = false;
 
 window.addEventListener('popstate', (event) => {
-  if (event.state?.__electup && event.state.embedId === config.embedId) {
+  if (event.state?.__embedRouter && event.state.embedId === config.embedId) {
     suppressNextHashChange = true;
     event.stopImmediatePropagation();
     routerCore.handleExternalNavigation(event.state.path);
@@ -585,9 +585,9 @@ window.addEventListener('hashchange', (event) => {
 **Mitigation D: Tag initial state.** On first load, if the current history state doesn't already have the embed's tag, add it via `replaceState`. This ensures that if the user navigates forward into the embed and then hits back, the initial entry is recognized:
 
 ```javascript
-if (config.linkMode === 'spa' && !history.state?.__electup) {
+if (config.linkMode === 'spa' && !history.state?.__embedRouter) {
   safeReplaceState(
-    { ...history.state, __electup: true, embedId: config.embedId },
+    { ...history.state, __embedRouter: true, embedId: config.embedId },
     ''
   );
 }
@@ -644,7 +644,7 @@ Some host SPAs do soft navigations that destroy and recreate DOM regions without
 **Custom event**: The embed listens for a re-initialization event that the host (or the embed's own loader script) can dispatch:
 
 ```javascript
-window.addEventListener('electup_load', () => {
+window.addEventListener('embedRouter_load', () => {
   const appEl = document.getElementById(config.embedId);
   if (appEl && !appEl.__mounted) {
     mount(appEl);
@@ -679,7 +679,7 @@ After the application signals that rendering is done, the router dispatches a `C
 
 ```javascript
 function emitNavigationComplete() {
-  document.dispatchEvent(new CustomEvent('electupLoaded', {
+  document.dispatchEvent(new CustomEvent('embedRouterLoaded', {
     bubbles: false,  // don't let host page scripts react unexpectedly
     detail: {
       path: routerCore.current.path,
@@ -789,30 +789,30 @@ Each embed's adapter reads/writes only its own namespaced key. The `popstate` st
 
 ```javascript
 safePushState({
-  __electup: true,
+  __embedRouter: true,
   embedId: config.embedId,
   path: '/race/123'
 }, '', url);
 
 // In popstate handler:
-if (event.state?.__electup && event.state.embedId === config.embedId) {
+if (event.state?.__embedRouter && event.state.embedId === config.embedId) {
   // This is ours
 }
 ```
 
-Intent buffer keys are also namespaced: `electup_nav_ballot`, `electup_nav_guide`.
+Intent buffer keys are also namespaced: `embedRouter_nav_ballot`, `embedRouter_nav_guide`.
 
 ### sessionStorage as shared infrastructure
 
 The embed uses sessionStorage for multiple concerns: the navigation intent buffer, and potentially analytics state (visit ID, session start, screen depth). All keys must be namespaced under a consistent scheme:
 
 ```
-electup_nav_{embedId}          — navigation intent buffer
-electup_visit_{embedId}        — analytics visit ID
-electup_session_{embedId}      — analytics session state
+embedRouter_nav_{embedId}          — navigation intent buffer
+embedRouter_visit_{embedId}        — analytics visit ID
+embedRouter_session_{embedId}      — analytics session state
 ```
 
-The router library owns the `electup_nav_*` keys. Other keys are the application's responsibility, but the naming convention should be documented to avoid collisions.
+The router library owns the `embedRouter_nav_*` keys. Other keys are the application's responsibility, but the naming convention should be documented to avoid collisions.
 
 ---
 
@@ -876,8 +876,8 @@ Default to `hash` + `spa`. Only change when a specific interference pattern is o
 
 - [ ] Scroll-to-embed after SPA navigation
 - [ ] `fromEmbed` cookie for scroll-on-mount (reload mode)
-- [ ] `electupLoaded` custom event dispatch
-- [ ] `electup_load` listener for re-initialization after host soft navigation
+- [ ] `embedRouterLoaded` custom event dispatch
+- [ ] `embedRouter_load` listener for re-initialization after host soft navigation
 - [ ] Double-mount guard
 
 ### Phase 6: Resilience

@@ -1,6 +1,6 @@
 # embed-router: Implementation Punch List
 
-Changes needed to bring the existing `@electup/embed-router` package to production readiness, organized by priority. Each item includes the rationale, affected files, and implementation notes.
+Changes needed to bring the existing `embed-router` package to production readiness, organized by priority. Each item includes the rationale, affected files, and implementation notes.
 
 ---
 
@@ -372,7 +372,7 @@ The router currently emits `route` events and nothing else. Post-navigation conc
 /**
  * Signal that the application has finished rendering after a navigation.
  * This triggers post-navigation behaviors: scroll-to-embed and the
- * electupLoaded event.
+ * embedRouterLoaded event.
  *
  * Call this from your app after data fetching + rendering is complete.
  *
@@ -395,7 +395,7 @@ navigationComplete(options = {}) {
   }
 
   // Emit loaded event for host page / iframe parent integration
-  document.dispatchEvent(new CustomEvent('electupLoaded', {
+  document.dispatchEvent(new CustomEvent('embedRouterLoaded', {
     bubbles: false,
     detail: {
       path: this._currentRoute.path,
@@ -565,7 +565,7 @@ restart() {
 }
 ```
 
-The consuming application hooks into `window.addEventListener('electup_load', ...)` and calls `router.restart()`. The double-mount guard is the consumer's responsibility (check if the DOM element is already mounted).
+The consuming application hooks into `window.addEventListener('embedRouter_load', ...)` and calls `router.restart()`. The double-mount guard is the consumer's responsibility (check if the DOM element is already mounted).
 
 ---
 
@@ -594,5 +594,5 @@ These are application-layer concerns that belong in the consuming embed, not the
 - **Strategy detection at runtime** — the consumer determines the mode and passes it in (or calls `reconfigure()` after the API response)
 - **`fromEmbed` cookie for reload-mode scroll** — set in the consumer's click handler
 - **External link patching** (`target="_blank"` on API content) — requires knowledge of content selectors
-- **Analytics sessionStorage keys** — the consumer's responsibility, using the `electup_*` prefix convention
+- **Analytics sessionStorage keys** — the consumer's responsibility, using the `embedRouter_*` prefix convention
 - **DOM mutation observer for re-mounting** — the consumer detects removal and calls `router.restart()`

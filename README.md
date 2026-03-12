@@ -4,9 +4,9 @@ A client-side routing library for embeddable widgets that live as `<script>` tag
 
 ## The Problem
 
-We build embeddable election and civic engagement widgets — candidate profiles, voter guides, topic comparisons — that clients embed on their sites via `<script>` tags. Every screen inside these widgets needs a shareable URL so voters can link each other to specific candidates or topics.
+Embeddable widgets — dashboards, interactive tools, multi-screen apps — get embedded on third-party sites via `<script>` tags. Every screen inside these widgets needs a shareable URL so users can link to specific views.
 
-The standard solution for embedded routing is **hash-based URLs** (`#/city-council/candidate/harper`). But several of the CMS platforms our clients use are themselves single-page applications with their own hash routing. Embedding a hash-routed widget inside a hash-routed CMS creates collisions: broken history, lost state, unpredictable navigation.
+The standard solution for embedded routing is **hash-based URLs** (`#/city-council/candidate/harper`). But some host platforms are themselves single-page applications with their own hash routing. Embedding a hash-routed widget inside a hash-routed CMS creates collisions: broken history, lost state, unpredictable navigation.
 
 **Query string routing** (`?route=/city-council/candidate/harper`) is the escape hatch. Query parameters don't conflict with hash routing, work in every browser, and produce shareable URLs. But being a "guest" on someone else's page introduces challenges that no existing router library was designed to handle:
 
@@ -14,7 +14,7 @@ The standard solution for embedded routing is **hash-based URLs** (`#/city-counc
 - The host CMS may **patch `history.pushState`** and react to URL changes we make.
 - `pushState` does **not fire `popstate`**, so we can't rely on events alone to detect external URL changes.
 - The host CMS may use **its own query parameters** that we need to preserve.
-- Legacy embed URLs using the old parameter format (`?section=X&candidate=Y`) are in the wild and need to keep working.
+- Legacy embed URLs using an older parameter format may be in the wild and need to keep working.
 
 This library solves all of these problems.
 
@@ -248,7 +248,7 @@ Creates a router instance. Does **not** start listening for URL changes until `s
 | `defaultRoute` | `string` | `'/'` | Route path when no route info is found in the URL. |
 | `legacyRoutes` | `Array` | `[]` | Legacy URL migration patterns (see [Legacy Support](#legacy-url-support) below). |
 | `prefix` | `string` | `''` | Hash namespace prefix (hash mode only). See [Hash Prefix](#hash-prefix) below. |
-| `embedId` | `string \| null` | `null` | DOM element ID of the embed container. Used by `navigationComplete()` for scroll-to-embed and the `electupLoaded` custom event. |
+| `embedId` | `string \| null` | `null` | DOM element ID of the embed container. Used by `navigationComplete()` for scroll-to-embed and the `embedRouterLoaded` custom event. |
 | `pollInterval` | `number` | `100` | Milliseconds between URL change checks. Set to `0` to disable polling. |
 | `debug` | `boolean` | `false` | Log all routing decisions to the console. |
 | `initialUrl` | `object \| null` | `null` | From `snapshotUrl()`. If null, reads current URL. |
@@ -409,7 +409,7 @@ router.storeGoingTo('candidate', { section: 'city-council', candidate: 'harper' 
 Signal that the application has finished rendering after a navigation. Triggers post-navigation behaviors:
 
 1. **Scroll-to-embed** — if `embedId` is configured (or `options.scrollToId` is passed), scrolls the embed into view. Only scrolls **up** (to bring the embed into the viewport), never down.
-2. **`electupLoaded` custom event** — dispatches a `CustomEvent` on `document` with `{ path, params, embedId }` detail. Useful for host page integrations (e.g., iframe resizers, analytics).
+2. **`embedRouterLoaded` custom event** — dispatches a `CustomEvent` on `document` with `{ path, params, embedId }` detail. Useful for host page integrations (e.g., iframe resizers, analytics).
 3. **`navigationComplete` event** — emits on the router's own emitter for subscribers.
 
 ```js
@@ -696,8 +696,8 @@ This is invaluable when debugging routing issues in unfamiliar CMS environments.
 The library ships with two test suites (172 tests total):
 
 ```bash
-node src/test-core.js     # Route matching, normalization, legacy migration, emitter (65 tests)
-node src/test-router.js   # Full router lifecycle with browser mocks (107 tests)
+node tests/test-core.js     # Route matching, normalization, legacy migration, emitter (65 tests)
+node tests/test-router.js   # Full router lifecycle with browser mocks (107 tests)
 ```
 
 The integration tests mock `window.location`, `history`, and DOM event listeners to simulate real browser behavior including `pushState`, `popstate`, and the host-CMS-clobbers-our-params scenario.
