@@ -70,6 +70,25 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Remove specific parameters from a raw search string without re-encoding
+ * the remaining values. URLSearchParams.toString() percent-encodes characters
+ * like `/` → `%2F`, which corrupts readable route paths. This operates on
+ * the raw `&`-delimited pairs to avoid that.
+ *
+ * @param {string} search - raw search string (with or without leading '?')
+ * @param {string|string[]} paramsToRemove - param name(s) to strip
+ * @returns {string} cleaned search string (with leading '?' if non-empty, '' otherwise)
+ */
+export function removeRawSearchParams(search, paramsToRemove) {
+  const names = typeof paramsToRemove === 'string' ? [paramsToRemove] : paramsToRemove;
+  const removeSet = new Set(names);
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  if (!raw) return '';
+  const kept = raw.split('&').filter(pair => pair && !removeSet.has(pair.split('=')[0]));
+  return kept.length ? '?' + kept.join('&') : '';
+}
+
+/**
  * Call the native (unpatched) history.pushState.
  * @param {*} state
  * @param {string} title

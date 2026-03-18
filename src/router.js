@@ -52,9 +52,9 @@
 
 import { HashStrategy } from './hash.js';
 import { QueryStringStrategy } from './query.js';
-import { safeReplaceState } from './history.js';
+import { safeReplaceState, removeRawSearchParams } from './history.js';
 import { compileRoutes, matchRoute, buildPath } from './matcher.js';
-import { migrateLegacyUrl, removeLegacyParams } from './legacy.js';
+import { migrateLegacyUrl } from './legacy.js';
 import { normalizePath, isPathSafe } from './normalize.js';
 import { Emitter } from './emitter.js';
 
@@ -401,14 +401,11 @@ export class QueryRouter {
     }
 
     // Query mode: build URL preserving existing params.
-    // Build the param manually so slashes stay readable (?route=/a/b not %2Fa%2Fb),
-    // matching the approach in QueryStringStrategy.write().
-    const url = new URL(window.location.href);
+    // Use removeRawSearchParams so slashes stay readable (?route=/a/b not %2Fa%2Fb).
     const paramName = this._strategy.param;
-    url.searchParams.delete(paramName);
-    const base = url.pathname + url.search + url.hash;
-    const sep = url.search ? '&' : '?';
-    return base + sep + encodeURIComponent(paramName) + '=' + normalized;
+    const cleaned = removeRawSearchParams(window.location.search, paramName);
+    const sep = cleaned ? '&' : '?';
+    return window.location.pathname + cleaned + sep + encodeURIComponent(paramName) + '=' + normalized + window.location.hash;
   }
 
   /**
@@ -824,20 +821,14 @@ export class QueryRouter {
    */
   _performLegacyMigration(migration) {
     try {
-      const url = new URL(window.location.href);
-      const cleaned = removeLegacyParams(url.searchParams, migration.matchedParams);
-
-      // Build new URL with cleaned params + our route param
-      const newUrl = new URL(window.location.href);
-      newUrl.search = cleaned.toString();
+      // Write route under the new strategy (puts clean slashes in the URL)
       this._strategy.write(migration.path, 'replace');
 
-      // Now remove the legacy params from the URL that strategy.write created
-      const finalUrl = new URL(window.location.href);
-      for (const param of migration.matchedParams) {
-        finalUrl.searchParams.delete(param);
-      }
-      safeReplaceState(window.history.state, '', finalUrl.toString());
+      // Remove legacy params from the URL that strategy.write created,
+      // without re-encoding our route param's slashes as %2F.
+      const cleaned = removeRawSearchParams(window.location.search, migration.matchedParams);
+      const href = window.location.pathname + cleaned + window.location.hash;
+      safeReplaceState(window.history.state, '', href);
 
       this._log('Legacy URL migrated', {
         from: migration.matchedParams,

@@ -15,7 +15,7 @@
  * - Optional interference detection to warn when params are stripped
  */
 
-import { safePushState, safeReplaceState } from './history.js';
+import { safePushState, safeReplaceState, removeRawSearchParams } from './history.js';
 
 export class QueryStringStrategy {
   /**
@@ -75,11 +75,12 @@ export class QueryStringStrategy {
    * @param {'push'|'replace'} mode
    */
   write(path, mode) {
-    const url = new URL(window.location.href);
-    // Build param manually so slashes stay readable (?route=/a/b not ?route=%2Fa%2Fb)
-    url.searchParams.delete(this.param);
-    const sep = url.search ? '&' : '?';
-    const href = url.toString() + sep + encodeURIComponent(this.param) + '=' + path;
+    // Build param manually so slashes stay readable (?route=/a/b not ?route=%2Fa%2Fb).
+    // removeRawSearchParams strips our param from the raw search string without
+    // re-encoding other params' values (URL.toString() would encode / → %2F).
+    const cleaned = removeRawSearchParams(window.location.search, this.param);
+    const sep = cleaned ? '&' : '?';
+    const href = window.location.pathname + cleaned + sep + encodeURIComponent(this.param) + '=' + path + window.location.hash;
 
     // Merge our state key into existing history.state (preserve host's state like psUrl)
     const state = { ...window.history.state, [this._stateKey]: path };
