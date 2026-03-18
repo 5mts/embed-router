@@ -1,6 +1,6 @@
 {
   "name": "embed-router",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Client-side routing for embeddable widgets in hostile CMS environments",
   "type": "module",
   "main": "./src/index.js",
