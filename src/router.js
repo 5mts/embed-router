@@ -400,12 +400,15 @@ export class QueryRouter {
       return prefix ? `#${prefix}:${normalized}` : `#${normalized}`;
     }
 
-    // Query mode: build URL preserving existing params
+    // Query mode: build URL preserving existing params.
+    // Build the param manually so slashes stay readable (?route=/a/b not %2Fa%2Fb),
+    // matching the approach in QueryStringStrategy.write().
     const url = new URL(window.location.href);
     const paramName = this._strategy.param;
-    url.searchParams.set(paramName, normalized);
-    // Return relative URL (path + search + hash)
-    return url.pathname + url.search + url.hash;
+    url.searchParams.delete(paramName);
+    const base = url.pathname + url.search + url.hash;
+    const sep = url.search ? '&' : '?';
+    return base + sep + encodeURIComponent(paramName) + '=' + normalized;
   }
 
   /**
