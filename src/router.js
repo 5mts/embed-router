@@ -441,14 +441,15 @@ export class QueryRouter {
   navigationComplete(options = {}) {
     const scrollToId = options.scrollToId || this._config.embedId;
 
-    // Scroll to embed (only scroll UP to bring it into view, not down)
+    // Scroll to embed if it's not already visible in the viewport
     if (scrollToId && typeof document !== 'undefined') {
       const el = document.getElementById(scrollToId);
       if (el) {
         const rect = el.getBoundingClientRect();
-        const targetTop = rect.top + window.scrollY - (window.innerHeight * 0.08);
-        if (window.scrollY > targetTop) {
-          window.scrollTo({ top: targetTop });
+        const isVisible = rect.top >= 0 && rect.top < window.innerHeight;
+        if (!isVisible) {
+          const targetTop = rect.top + window.scrollY - (window.innerHeight * 0.08);
+          window.scrollTo({ top: Math.max(0, targetTop) });
         }
       }
     }
